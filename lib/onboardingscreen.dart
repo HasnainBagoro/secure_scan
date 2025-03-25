@@ -1,5 +1,3 @@
-import 'dart:ffi';
-
 import 'package:flutter/material.dart';
 
 class OnboardingScreen extends StatelessWidget {
@@ -60,18 +58,25 @@ class OnboardingScreen extends StatelessWidget {
               ),
             ),
             SizedBox(
-              height: 20,
+              height: 70,
             ),
-            ElevatedButton(
-              onPressed: () {
-                // Navigate to the next screen or home screen
-                Navigator.pushReplacementNamed(context, '/home');
-              },
-              child: const Text('Next'),
-              style: ElevatedButton.styleFrom(
-                iconColor: Color.fromARGB(255, 25, 56, 134),
+            Container(
+              width: 150,
+              height: 50,
+              decoration: BoxDecoration(
+                color: Colors.deepPurple,
+                borderRadius: BorderRadius.circular(50),
               ),
-            ),
+              child: Center(
+                child: Text(
+                  'Next',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                  ),
+                ),
+              ),
+            )
           ],
         ),
       ),

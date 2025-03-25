@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:secure_scan/home.dart';
 import 'package:secure_scan/onboardingscreen2.dart';
 
 class OnboardingScreen extends StatelessWidget {
@@ -11,8 +12,11 @@ class OnboardingScreen extends StatelessWidget {
         actions: [
           TextButton(
             onPressed: () {
-              // Navigate to the next screen or home screen
-              Navigator.pushReplacementNamed(context, '/home');
+                Navigator.pushAndRemoveUntil(
+                  context,
+                  MaterialPageRoute(builder: (context) => HomeScreen()),
+                  (route) => false,
+                );
             },
             child: const Text(
               'Skip',

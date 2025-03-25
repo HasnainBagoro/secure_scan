@@ -11,8 +11,11 @@ class OnboardingScreen3 extends StatelessWidget {
         actions: [
           TextButton(
             onPressed: () {
-              // Navigate to the next screen or home screen
-              Navigator.pushReplacementNamed(context, '/home');
+                Navigator.pushAndRemoveUntil(
+                  context,
+                  MaterialPageRoute(builder: (context) => HomeScreen()),
+                  (route) => false,
+                );
             },
             child: const Text(
               'Skip',

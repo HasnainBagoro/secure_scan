@@ -32,7 +32,7 @@ class OnboardingScreen extends StatelessWidget {
         child: Column(
           children: [
             SizedBox(
-              height: 100,
+              height: 70,
             ),
             Image.asset(
               'images/onboarding.png',

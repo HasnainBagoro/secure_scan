@@ -9,113 +9,98 @@ class HistoryScreen extends StatefulWidget {
 }
 
 class _HistoryScreenState extends State<HistoryScreen> {
+  final List<String> historyItems = List.generate(
+    30, // Example: dynamic history count
+    (index) => "www.example${index + 1}.com",
+  );
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-        appBar: AppBar(
-          leading: IconButton(
-            icon: Icon(Icons.arrow_back),
-            onPressed: () {
-              Navigator.push(context,
-                  MaterialPageRoute(builder: (context) => HomeScreen()));
-            },
-          ),
+      appBar: AppBar(
+        leading: IconButton(
+          icon: Icon(Icons.arrow_back),
+          onPressed: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => HomeScreen()),
+            );
+          },
         ),
-        body: SafeArea(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              SizedBox(
-                height: 50,
+      ),
+      body: SafeArea(
+        child: Column(
+          children: [
+            SizedBox(height: 50),
+            Text(
+              'Secure Scan',
+              style: TextStyle(
+                fontSize: 25,
+                fontWeight: FontWeight.bold,
               ),
-              Text(
-                'Secure Scan',
-                style: TextStyle(
-                  fontSize: 25,
-                  fontWeight: FontWeight.bold,
-                ),
+            ),
+            SizedBox(height: 8),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 100),
+              child: Text(
+                'Secure Every Scan, Trust Every Code.',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 10),
               ),
-              SizedBox(
-                height: 8,
-              ),
-              Padding(
-                padding: const EdgeInsets.only(left: 100, right: 100),
-                child: Text(
-                  'Secure Every Scan, Trust Every Code.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 10,
-                  ),
-                ),
-              ),
-              SizedBox(
-                height: 50,
-              ),
-              Container(
-                height: 400,
+            ),
+            SizedBox(height: 50),
+            Expanded(
+              child: Container(
                 width: 330,
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    SizedBox(
-                      height: 20,
-                    ),
+                    SizedBox(height: 20),
                     Text(
                       'History',
-                      style:
-                          TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+                      style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
                     ),
-                    SizedBox(
-                      height: 20,
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.only(left: 20, right: 20),
-                      child: Container(
-                        height: 30,
-                        width: double.infinity,
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(
-                              'www.abc.com',
-                              style: TextStyle(color: Colors.red),
+                    SizedBox(height: 20),
+                    Expanded(
+                      child: ListView.builder(
+                        padding: const EdgeInsets.symmetric(horizontal: 20),
+                        itemCount: historyItems.length,
+                        itemBuilder: (context, index) {
+                          return Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 8),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(
+                                  historyItems[index],
+                                  style: TextStyle(
+                                    color: index.isEven ? Colors.red : Colors.green,
+                                  ),
+                                ),
+                                Icon(Icons.delete),
+                              ],
                             ),
-                            Icon(Icons.delete),
-                          ],
-                        ),
-                      ),
-                    ),
-                    SizedBox(
-                      height: 15,
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.only(left: 20, right: 20),
-                      child: Container(
-                        height: 30,
-                        width: double.infinity,
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(
-                              'www.abc.com',
-                              style: TextStyle(color: Colors.green),
-                            ),
-                            Icon(Icons.delete),
-                          ],
-                        ),
+                          );
+                        },
                       ),
                     ),
                   ],
                 ),
               ),
-              SizedBox(
-                height: 50,
+            ),
+            SizedBox(height: 20),
+            Container(
+              width: 150,
+              height: 50,
+              margin: const EdgeInsets.only(bottom: 20),
+              decoration: BoxDecoration(
+                color: Colors.deepPurple,
+                borderRadius: BorderRadius.circular(50),
               ),
-              InkWell(
+              child: InkWell(
                 onTap: () {
                   Navigator.pushAndRemoveUntil(
                     context,
@@ -123,26 +108,17 @@ class _HistoryScreenState extends State<HistoryScreen> {
                     (route) => false,
                   );
                 },
-                child: Container(
-                  width: 150,
-                  height: 50,
-                  decoration: BoxDecoration(
-                    color: Colors.deepPurple,
-                    borderRadius: BorderRadius.circular(50),
-                  ),
-                  child: Center(
-                    child: Text(
-                      'Scan Again',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 16,
-                      ),
-                    ),
+                child: Center(
+                  child: Text(
+                    'Scan Again',
+                    style: TextStyle(color: Colors.white, fontSize: 16),
                   ),
                 ),
               ),
-            ],
-          ),
-        ));
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }

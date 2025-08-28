@@ -17,44 +17,101 @@ class _HomeScreenState extends State<HomeScreen> {
   bool isScanning = false;
 
   final String apiKey = "AIzaSyA-uTJnmdBkQMipZOIeA92iGujHyoef2H0";
+  final String mlApiUrl = "https://mlapi-production-0d93.up.railway.app/predict";
 
   String maskUrl(String url) {
     return url.replaceAll('.', '[.]');
   }
 
-  Future<void> checkUrlSafety(String url) async {
-  setState(() => isLoading = true);
+  // Function to check URL using your trained ML model
+  Future<bool> checkUrlWithMLModel(String url) async {
+    try {
+      final response = await http.post(
+        Uri.parse(mlApiUrl),
+        headers: {"Content-Type": "application/json"},
+        body: jsonEncode({"url": url}),
+      ).timeout(const Duration(seconds: 10));
 
-  final requestBody = {
-    "client": {"clientId": "flutter_app", "clientVersion": "1.0"},
-    "threatInfo": {
-      "threatTypes": [
-        "MALWARE",
-        "SOCIAL_ENGINEERING",
-        "UNWANTED_SOFTWARE",
-        "POTENTIALLY_HARMFUL_APPLICATION"
-      ],
-      "platformTypes": ["ANY_PLATFORM"],
-      "threatEntryTypes": ["URL"],
-      "threatEntries": [
-        {"url": url}
-      ]
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body) as Map<String, dynamic>;
+        
+        // Assuming your ML model returns something like {"prediction": "malicious"} or {"is_malicious": true}
+        // Adjust this based on your actual API response format
+        if (data.containsKey('prediction')) {
+          return data['prediction'].toString().toLowerCase() == 'malicious';
+        } else if (data.containsKey('is_malicious')) {
+          return data['is_malicious'] == true;
+        } else if (data.containsKey('result')) {
+          return data['result'].toString().toLowerCase() == 'malicious';
+        }
+        
+        // If the response format is different, you may need to adjust this
+        return false; // Default to safe if format is unexpected
+      }
+      
+      return false; // Default to safe if API call fails
+    } catch (e) {
+      debugPrint("ML Model API error: $e");
+      return false; // Default to safe if there's an exception
     }
-  };
+  }
 
-  final response = await http.post(
-    Uri.parse(
-        "https://safebrowsing.googleapis.com/v4/threatMatches:find?key=$apiKey"),
-    headers: {"Content-Type": "application/json"},
-    body: jsonEncode(requestBody),
-  );
+  Future<void> checkUrlSafety(String url) async {
+    setState(() => isLoading = true);
 
-  setState(() => isLoading = false);
+    bool isMalicious = false;
+    bool useGoogleApi = true;
+    String detectionSource = "Google Safe Browsing";
 
-  if (response.statusCode == 200) {
-    final data = jsonDecode(response.body) as Map<String, dynamic>;
+    // First try Google Safe Browsing API
+    try {
+      final requestBody = {
+        "client": {"clientId": "flutter_app", "clientVersion": "1.0"},
+        "threatInfo": {
+          "threatTypes": [
+            "MALWARE",
+            "SOCIAL_ENGINEERING",
+            "UNWANTED_SOFTWARE",
+            "POTENTIALLY_HARMFUL_APPLICATION"
+          ],
+          "platformTypes": ["ANY_PLATFORM"],
+          "threatEntryTypes": ["URL"],
+          "threatEntries": [
+            {"url": url}
+          ]
+        }
+      };
 
-    if (data.isNotEmpty) {
+      final response = await http.post(
+        Uri.parse(
+            "https://safebrowsing.googleapis.com/v4/threatMatches:find?key=$apiKey"),
+        headers: {"Content-Type": "application/json"},
+        body: jsonEncode(requestBody),
+      ).timeout(const Duration(seconds: 10));
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body) as Map<String, dynamic>;
+        isMalicious = data.isNotEmpty;
+      } else {
+        // Google API failed, use ML model as fallback
+        useGoogleApi = false;
+      }
+    } catch (e) {
+      // Google API failed, use ML model as fallback
+      debugPrint("Google Safe Browsing API error: $e");
+      useGoogleApi = false;
+    }
+
+    // If Google API failed, use ML model as fallback
+    if (!useGoogleApi) {
+      detectionSource = "ML Model";
+      isMalicious = await checkUrlWithMLModel(url);
+    }
+
+    setState(() => isLoading = false);
+
+    // Show appropriate dialog based on results
+    if (isMalicious) {
       // Dangerous Link
       showDialog(
         context: context,
@@ -71,7 +128,8 @@ class _HomeScreenState extends State<HomeScreen> {
           content: SingleChildScrollView(
             child: Text(
               "This link may be unsafe:\n${maskUrl(url)}\n\n"
-              "We recommend avoiding it unless you are sure it’s trustworthy.",
+              "We recommend avoiding it unless you are sure it's trustworthy.\n\n"
+              "Detection source: $detectionSource",
               style: const TextStyle(fontSize: 14),
             ),
           ),
@@ -105,7 +163,8 @@ class _HomeScreenState extends State<HomeScreen> {
             ],
           ),
           content: Text(
-            "No known threats detected for:\n${maskUrl(url)}",
+            "No known threats detected for provided Link\n\n"
+            "Detection source: $detectionSource",
             style: const TextStyle(fontSize: 14),
           ),
           actions: [
@@ -133,11 +192,7 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       );
     }
-  } else {
-    debugPrint("Error checking URL: ${response.body}");
   }
-}
-
 
   void startScanning() {
     setState(() {
@@ -159,9 +214,9 @@ class _HomeScreenState extends State<HomeScreen> {
       body: SafeArea(
         child: Column(
           children: [
-            const SizedBox(height: 20),
+            const SizedBox(height: 50),
             const Text(
-              '🔒 Secure Scan',
+              'Secure Scan',
               style: TextStyle(
                   fontSize: 28,
                   fontWeight: FontWeight.bold,
@@ -173,7 +228,7 @@ class _HomeScreenState extends State<HomeScreen> {
               textAlign: TextAlign.center,
               style: TextStyle(fontSize: 12, color: Colors.grey),
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 50),
 
             // Camera always visible
             Expanded(
@@ -181,9 +236,9 @@ class _HomeScreenState extends State<HomeScreen> {
                 alignment: Alignment.center,
                 children: [
                   Container(
-                    margin: const EdgeInsets.all(16),
+                    margin: const EdgeInsets.all(25),
                     decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(20),
+                      borderRadius: BorderRadius.circular(30),
                       border: Border.all(color: Colors.deepPurple, width: 3),
                     ),
                     clipBehavior: Clip.hardEdge,
@@ -228,46 +283,71 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
 
+            SizedBox(height: 40,),
+
             // Scan button
             Padding(
-              padding: const EdgeInsets.only(bottom: 20),
-              child: ElevatedButton.icon(
-                onPressed: () {
-                  startScanning();
-                },
-                icon: const Icon(
-                  Icons.qr_code_scanner,
-                  color: Colors.white,
-                ),
-                label: Text(isScanning ? "Scanning..." : "Scan Now"),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.deepPurple,
-                  foregroundColor: Colors.white,
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
+  padding: const EdgeInsets.only(bottom: 20),
+  child: GestureDetector(
+    onTap: () {
+      if (!isScanning) {
+        startScanning();
+      }
+    },
+    child: Container(
+      padding: EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(40),
+        color: isScanning ? Colors.deepPurple.withOpacity(0.8) : Colors.deepPurple,
+      ),
+      child: AnimatedSwitcher(
+        duration: Duration(milliseconds: 300),
+        child: isScanning 
+          ? SizedBox(
+              key: ValueKey('loading'),
+              width: 40,
+              height: 40,
+              child: CircularProgressIndicator(
+                color: Colors.white,
+                strokeWidth: 3,
               ),
+            )
+          : Icon(
+              key: ValueKey('icon'),
+              Icons.qr_code_scanner,
+              color: Colors.white,
+              size: 40,
             ),
-
-            // Last scanned code
-            // if (!isLoading && scannedCode.isNotEmpty)
-            //   Padding(
-            //     padding: const EdgeInsets.only(bottom: 20),
-            //     child: Text(
-            //       "Last scanned: ${maskUrl(scannedCode)}",
-            //       style: const TextStyle(
-            //           fontSize: 14,
-            //           fontWeight: FontWeight.bold,
-            //           color: Colors.white),
-            //       textAlign: TextAlign.center,
-            //     ),
-            //   ),
+      ),
+    ),
+  ),
+),
           ],
         ),
       ),
     );
   }
 }
+
+
+
+// child: ElevatedButton.icon(
+//                 onPressed: () {
+//                   startScanning();
+//                 },
+//                 icon: const Icon(
+//                   Icons.qr_code_scanner,
+//                   color: Colors.white,
+//                   size: 40,
+//                 ),
+//                 label: Text(isScanning ? "" : ""),
+//                 style: ElevatedButton.styleFrom(
+//                   backgroundColor: Colors.deepPurple,
+//                   foregroundColor: Colors.white,
+//                   padding:
+//                       const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+//                   shape: RoundedRectangleBorder(
+//                     borderRadius: BorderRadius.circular(12),
+//                   ),
+//                 ),
+//               ),

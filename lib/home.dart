@@ -17,7 +17,7 @@ class _HomeScreenState extends State<HomeScreen> {
   bool isScanning = false;
 
   final String apiKey = "AIzaSyA-uTJnmdBkQMipZOIeA92iGujHyoef2H0";
-  final String mlApiUrl = "https://mlapi-production-0d93.up.railway.app/predict";
+  final String mlApiUrl = "https://mlapi-production-1e77.up.railway.app/predict";
 
   String maskUrl(String url) {
     return url.replaceAll('.', '[.]');

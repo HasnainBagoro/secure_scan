@@ -23,20 +23,18 @@ class _HomeScreenState extends State<HomeScreen> {
     return url.replaceAll('.', '[.]');
   }
 
-  // Function to check URL using your trained ML model
+  /// Optional ML model check (used only if Google fails)
   Future<bool> checkUrlWithMLModel(String url) async {
     try {
       final response = await http.post(
         Uri.parse(mlApiUrl),
         headers: {"Content-Type": "application/json"},
         body: jsonEncode({"url": url}),
-      ).timeout(const Duration(seconds: 10));
+      ).timeout(const Duration(seconds: 5));
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body) as Map<String, dynamic>;
-        
-        // Assuming your ML model returns something like {"prediction": "malicious"} or {"is_malicious": true}
-        // Adjust this based on your actual API response format
+
         if (data.containsKey('prediction')) {
           return data['prediction'].toString().toLowerCase() == 'malicious';
         } else if (data.containsKey('is_malicious')) {
@@ -44,26 +42,21 @@ class _HomeScreenState extends State<HomeScreen> {
         } else if (data.containsKey('result')) {
           return data['result'].toString().toLowerCase() == 'malicious';
         }
-        
-        // If the response format is different, you may need to adjust this
-        return false; // Default to safe if format is unexpected
       }
-      
-      return false; // Default to safe if API call fails
+      return false;
     } catch (e) {
       debugPrint("ML Model API error: $e");
-      return false; // Default to safe if there's an exception
+      return false;
     }
   }
 
+  /// Check URL safety with Google Safe Browsing API
   Future<void> checkUrlSafety(String url) async {
     setState(() => isLoading = true);
 
-    bool isMalicious = false;
-    bool useGoogleApi = true;
+    bool? isMalicious; // null = API failed
     String detectionSource = "Google Safe Browsing";
 
-    // First try Google Safe Browsing API
     try {
       final requestBody = {
         "client": {"clientId": "flutter_app", "clientVersion": "1.0"},
@@ -87,112 +80,144 @@ class _HomeScreenState extends State<HomeScreen> {
             "https://safebrowsing.googleapis.com/v4/threatMatches:find?key=$apiKey"),
         headers: {"Content-Type": "application/json"},
         body: jsonEncode(requestBody),
-      ).timeout(const Duration(seconds: 10));
+      ).timeout(const Duration(seconds: 5));
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body) as Map<String, dynamic>;
-        isMalicious = data.isNotEmpty;
+        if (data.isNotEmpty) {
+          isMalicious = true; // Google flagged it
+        } else {
+          isMalicious = false; // Safe according to Google
+        }
       } else {
-        // Google API failed, use ML model as fallback
-        useGoogleApi = false;
+        isMalicious = null; // API didn’t respond properly
       }
     } catch (e) {
-      // Google API failed, use ML model as fallback
       debugPrint("Google Safe Browsing API error: $e");
-      useGoogleApi = false;
-    }
-
-    // If Google API failed, use ML model as fallback
-    if (!useGoogleApi) {
-      detectionSource = "ML Model";
-      isMalicious = await checkUrlWithMLModel(url);
+      isMalicious = null; // Error / timeout
     }
 
     setState(() => isLoading = false);
 
-    // Show appropriate dialog based on results
-    if (isMalicious) {
-      // Dangerous Link
-      showDialog(
-        context: context,
-        builder: (_) => AlertDialog(
-          shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12)),
-          title: Row(
-            children: const [
-              Icon(Icons.warning, color: Colors.red),
-              SizedBox(width: 8),
-              Text("Dangerous Link"),
-            ],
-          ),
-          content: SingleChildScrollView(
-            child: Text(
-              "This link may be unsafe:\n${maskUrl(url)}\n\n"
-              "We recommend avoiding it unless you are sure it's trustworthy.\n\n"
-              "Detection source: $detectionSource",
-              style: const TextStyle(fontSize: 14),
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.pop(context);
-                startScanning();
-              },
-              child: const Text("Retry"),
-            ),
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text("Close"),
-            ),
-          ],
-        ),
-      );
+    // Show dialog based on result
+    if (isMalicious == true) {
+      showDangerousDialog(url, detectionSource);
+    } else if (isMalicious == false) {
+      showSafeDialog(url, detectionSource);
     } else {
-      // Safe Link
-      showDialog(
-        context: context,
-        builder: (_) => AlertDialog(
-          shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12)),
-          title: Row(
-            children: const [
-              Icon(Icons.check_circle, color: Colors.green),
-              SizedBox(width: 8),
-              Text("Safe Link"),
-            ],
-          ),
-          content: Text(
-            "No known threats detected for provided Link\n\n"
-            "Detection source: $detectionSource",
-            style: const TextStyle(fontSize: 14),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.pop(context);
-                startScanning();
-              },
-              child: const Text("Retry"),
-            ),
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text("Cancel"),
-            ),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
-              onPressed: () {
-                Navigator.pop(context);
-                launchUrl(Uri.parse(url),
-                    mode: LaunchMode.externalApplication);
-              },
-              child: const Text("Visit"),
-            ),
-          ],
-        ),
-      );
+      showUnknownDialog(url, detectionSource);
     }
   }
+
+  /// ---------- Dialogs ----------
+
+  void showDangerousDialog(String url, String source) {
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        title: Row(
+          children: const [
+            Icon(Icons.warning, color: Colors.red),
+            SizedBox(width: 8),
+            Text("Dangerous Link"),
+          ],
+        ),
+        content: Text(
+          "This link may be unsafe:\n${maskUrl(url)}\n\n"
+          "Detection source: $source",
+          style: const TextStyle(fontSize: 14),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              startScanning();
+            },
+            child: const Text("Retry"),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text("Close"),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void showSafeDialog(String url, String source) {
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        title: Row(
+          children: const [
+            Icon(Icons.check_circle, color: Colors.green),
+            SizedBox(width: 8),
+            Text("Safe Link"),
+          ],
+        ),
+        content: Text(
+          "No known threats detected for:\n${maskUrl(url)}\n\n"
+          "Detection source: $source",
+          style: const TextStyle(fontSize: 14),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              startScanning();
+            },
+            child: const Text("Retry"),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
+            onPressed: () {
+              Navigator.pop(context);
+              launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+            },
+            child: const Text("Visit"),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void showUnknownDialog(String url, String source) {
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        title: Row(
+          children: const [
+            Icon(Icons.help, color: Colors.orange),
+            SizedBox(width: 8),
+            Text("Not Found"),
+          ],
+        ),
+        content: Text(
+          "No such entity in the database for:\n${maskUrl(url)}\n\n"
+          "Detection source: $source",
+          style: const TextStyle(fontSize: 14),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              startScanning();
+            },
+            child: const Text("Retry"),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text("Close"),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// ---------- Scanner Controls ----------
 
   void startScanning() {
     setState(() {
@@ -230,7 +255,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             const SizedBox(height: 50),
 
-            // Camera always visible
+            // Camera view
             Expanded(
               child: Stack(
                 alignment: Alignment.center,
@@ -244,12 +269,12 @@ class _HomeScreenState extends State<HomeScreen> {
                     clipBehavior: Clip.hardEdge,
                     child: MobileScanner(
                       onDetect: (capture) {
-                        if (!isScanning) return; // only detect if scanning
+                        if (!isScanning) return;
                         final List<Barcode> barcodes = capture.barcodes;
                         for (final barcode in barcodes) {
                           final code = barcode.rawValue ?? 'Unknown';
                           if (code != scannedCode &&
-                              Uri.tryParse(code)?.hasAbsolutePath == true) {
+                              Uri.tryParse(code)?.isAbsolute == true) {
                             stopScanning();
                             setState(() {
                               scannedCode = code;
@@ -261,7 +286,6 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                   ),
 
-                  // Loading overlay
                   if (isLoading)
                     Positioned.fill(
                       child: Container(
@@ -283,71 +307,50 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
 
-            SizedBox(height: 40,),
+            const SizedBox(height: 40),
 
             // Scan button
             Padding(
-  padding: const EdgeInsets.only(bottom: 20),
-  child: GestureDetector(
-    onTap: () {
-      if (!isScanning) {
-        startScanning();
-      }
-    },
-    child: Container(
-      padding: EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(40),
-        color: isScanning ? Colors.deepPurple.withOpacity(0.8) : Colors.deepPurple,
-      ),
-      child: AnimatedSwitcher(
-        duration: Duration(milliseconds: 300),
-        child: isScanning 
-          ? SizedBox(
-              key: ValueKey('loading'),
-              width: 40,
-              height: 40,
-              child: CircularProgressIndicator(
-                color: Colors.white,
-                strokeWidth: 3,
+              padding: const EdgeInsets.only(bottom: 20),
+              child: GestureDetector(
+                onTap: () {
+                  if (!isScanning) {
+                    startScanning();
+                  }
+                },
+                child: Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(40),
+                    color: isScanning
+                        ? Colors.deepPurple.withOpacity(0.8)
+                        : Colors.deepPurple,
+                  ),
+                  child: AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 300),
+                    child: isScanning
+                        ? const SizedBox(
+                            key: ValueKey('loading'),
+                            width: 40,
+                            height: 40,
+                            child: CircularProgressIndicator(
+                              color: Colors.white,
+                              strokeWidth: 3,
+                            ),
+                          )
+                        : const Icon(
+                            key: ValueKey('icon'),
+                            Icons.qr_code_scanner,
+                            color: Colors.white,
+                            size: 40,
+                          ),
+                  ),
+                ),
               ),
-            )
-          : Icon(
-              key: ValueKey('icon'),
-              Icons.qr_code_scanner,
-              color: Colors.white,
-              size: 40,
             ),
-      ),
-    ),
-  ),
-),
           ],
         ),
       ),
     );
   }
 }
-
-
-
-// child: ElevatedButton.icon(
-//                 onPressed: () {
-//                   startScanning();
-//                 },
-//                 icon: const Icon(
-//                   Icons.qr_code_scanner,
-//                   color: Colors.white,
-//                   size: 40,
-//                 ),
-//                 label: Text(isScanning ? "" : ""),
-//                 style: ElevatedButton.styleFrom(
-//                   backgroundColor: Colors.deepPurple,
-//                   foregroundColor: Colors.white,
-//                   padding:
-//                       const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-//                   shape: RoundedRectangleBorder(
-//                     borderRadius: BorderRadius.circular(12),
-//                   ),
-//                 ),
-//               ),

@@ -342,7 +342,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             key: ValueKey('icon'),
                             Icons.qr_code_scanner,
                             color: Colors.white,
-                            size: 40,
+                            size: 40,  
                           ),
                   ),
                 ),

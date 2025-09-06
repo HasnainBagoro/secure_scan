@@ -17,40 +17,43 @@ class _HomeScreenState extends State<HomeScreen> {
   bool isScanning = false;
 
   final String apiKey = "AIzaSyA-uTJnmdBkQMipZOIeA92iGujHyoef2H0";
-  final String mlApiUrl = "https://mlapi-production-1e77.up.railway.app/predict";
+  final String mlApiUrl = "http://192.168.18.231:8000/predict";
 
   String maskUrl(String url) {
     return url.replaceAll('.', '[.]');
   }
 
-  /// Optional ML model check (used only if Google fails)
-  Future<bool> checkUrlWithMLModel(String url) async {
+  /// ML model check (your FastAPI backend)
+  Future<String?> checkUrlWithMLModel(String url) async {
     try {
+      setState(() => isLoading = true);
+
       final response = await http.post(
         Uri.parse(mlApiUrl),
         headers: {"Content-Type": "application/json"},
         body: jsonEncode({"url": url}),
-      ).timeout(const Duration(seconds: 5));
+      ).timeout(const Duration(seconds: 8));
+
+      setState(() => isLoading = false);
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body) as Map<String, dynamic>;
 
         if (data.containsKey('prediction')) {
-          return data['prediction'].toString().toLowerCase() == 'malicious';
-        } else if (data.containsKey('is_malicious')) {
-          return data['is_malicious'] == true;
-        } else if (data.containsKey('result')) {
-          return data['result'].toString().toLowerCase() == 'malicious';
+          final prediction = data['prediction'].toString();
+          final confidence = data['confidence']?.toString() ?? "N/A";
+          return "$prediction (confidence: $confidence)";
         }
       }
-      return false;
+      return "Unable to classify";
     } catch (e) {
+      setState(() => isLoading = false);
       debugPrint("ML Model API error: $e");
-      return false;
+      return "Error contacting ML model";
     }
   }
 
-  /// Check URL safety with Google Safe Browsing API
+  /// Google Safe Browsing API check
   Future<void> checkUrlSafety(String url) async {
     setState(() => isLoading = true);
 
@@ -80,26 +83,26 @@ class _HomeScreenState extends State<HomeScreen> {
             "https://safebrowsing.googleapis.com/v4/threatMatches:find?key=$apiKey"),
         headers: {"Content-Type": "application/json"},
         body: jsonEncode(requestBody),
-      ).timeout(const Duration(seconds: 5));
+      ).timeout(const Duration(seconds: 8));
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body) as Map<String, dynamic>;
         if (data.isNotEmpty) {
-          isMalicious = true; // Google flagged it
+          isMalicious = true;
         } else {
-          isMalicious = false; // Safe according to Google
+          isMalicious = false;
         }
       } else {
-        isMalicious = null; // API didn’t respond properly
+        isMalicious = null;
       }
     } catch (e) {
       debugPrint("Google Safe Browsing API error: $e");
-      isMalicious = null; // Error / timeout
+      isMalicious = null;
     }
 
     setState(() => isLoading = false);
 
-    // Show dialog based on result
+    // Show dialog
     if (isMalicious == true) {
       showDangerousDialog(url, detectionSource);
     } else if (isMalicious == false) {
@@ -124,18 +127,11 @@ class _HomeScreenState extends State<HomeScreen> {
           ],
         ),
         content: Text(
-          "This link may be unsafe:\n${maskUrl(url)}\n\n"
-          "Detection source: $source",
+          "This link may be unsafe:\n\n"
+          "Detection source:\n$source",
           style: const TextStyle(fontSize: 14),
         ),
         actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              startScanning();
-            },
-            child: const Text("Retry"),
-          ),
           TextButton(
             onPressed: () => Navigator.pop(context),
             child: const Text("Close"),
@@ -146,42 +142,54 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void showSafeDialog(String url, String source) {
-    showDialog(
-      context: context,
-      builder: (_) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        title: Row(
-          children: const [
-            Icon(Icons.check_circle, color: Colors.green),
-            SizedBox(width: 8),
-            Text("Safe Link"),
-          ],
-        ),
-        content: Text(
-          "No known threats detected for:\n${maskUrl(url)}\n\n"
-          "Detection source: $source",
-          style: const TextStyle(fontSize: 14),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              startScanning();
-            },
-            child: const Text("Retry"),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
-            onPressed: () {
-              Navigator.pop(context);
-              launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
-            },
-            child: const Text("Visit"),
-          ),
+  showDialog(
+    context: context,
+    builder: (_) => AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      title: Row(
+        children: const [
+          Icon(Icons.check_circle, color: Colors.green),
+          SizedBox(width: 8),
+          Text("Safe Link"),
         ],
       ),
-    );
-  }
+      content: Text(
+        "No known threats detected for provided link.\n\n"
+        "Detection source:\n$source",
+        style: const TextStyle(fontSize: 14),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () async {
+            Navigator.pop(context);
+            final mlResult = await checkUrlWithMLModel(url);
+
+            if (!mounted || mlResult == null) return;
+
+            // ✅ Check prediction value
+            if (mlResult.toLowerCase().contains("benign")) {
+              // Show Safe popup (reuse same dialog)
+              showSafeDialog(url, "ML Model");
+            } else {
+              // Show Dangerous popup if prediction is not benign
+              showDangerousDialog(url, "ML Model");
+            }
+          },
+          child: const Text("Smart Verify"),
+        ),
+        ElevatedButton(
+          style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
+          onPressed: () {
+            Navigator.pop(context);
+            launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+          },
+          child: const Text("Visit"),
+        ),
+      ],
+    ),
+  );
+}
+
 
   void showUnknownDialog(String url, String source) {
     showDialog(
@@ -342,7 +350,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             key: ValueKey('icon'),
                             Icons.qr_code_scanner,
                             color: Colors.white,
-                            size: 40,  
+                            size: 40,
                           ),
                   ),
                 ),

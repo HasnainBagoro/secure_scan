@@ -141,7 +141,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  void showSafeDialog(String url, String source) {
+  void showSafeDialog(String url, String source, {bool fromML = false}) {
   showDialog(
     context: context,
     builder: (_) => AlertDialog(
@@ -159,36 +159,42 @@ class _HomeScreenState extends State<HomeScreen> {
         style: const TextStyle(fontSize: 14),
       ),
       actions: [
-        TextButton(
-          onPressed: () async {
-            Navigator.pop(context);
-            final mlResult = await checkUrlWithMLModel(url);
+        if (!fromML) ...[
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(context);
+              final mlResult = await checkUrlWithMLModel(url);
 
-            if (!mounted || mlResult == null) return;
+              if (!mounted || mlResult == null) return;
 
-            // ✅ Check prediction value
-            if (mlResult.toLowerCase().contains("benign")) {
-              // Show Safe popup (reuse same dialog)
-              showSafeDialog(url, "ML Model");
-            } else {
-              // Show Dangerous popup if prediction is not benign
-              showDangerousDialog(url, "ML Model");
-            }
-          },
-          child: const Text("Smart Verify"),
-        ),
-        ElevatedButton(
-          style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
-          onPressed: () {
-            Navigator.pop(context);
-            launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
-          },
-          child: const Text("Visit"),
-        ),
+              // ✅ Check prediction value
+              if (mlResult.toLowerCase().contains("benign")) {
+                showSafeDialog(url, "Machine Learning Model", fromML: true); // 👈 flag set
+              } else {
+                showDangerousDialog(url, "Machine Learning Model");
+              }
+            },
+            child: const Text("Smart Verify"),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
+            onPressed: () {
+              Navigator.pop(context);
+              launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+            },
+            child: const Text("Visit"),
+          ),
+        ] else ...[
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text("Close"),
+          ),
+        ],
       ],
     ),
   );
 }
+
 
 
   void showUnknownDialog(String url, String source) {

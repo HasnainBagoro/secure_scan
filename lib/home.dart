@@ -210,17 +210,26 @@ class _HomeScreenState extends State<HomeScreen> {
           ],
         ),
         content: Text(
-          "No such entity in the database for:\n${maskUrl(url)}\n\n"
+          "No such entity in the database for provided link.\n\n"
           "Detection source: $source",
           style: const TextStyle(fontSize: 14),
         ),
         actions: [
           TextButton(
-            onPressed: () {
+            onPressed: () async {
               Navigator.pop(context);
-              startScanning();
+              final mlResult = await checkUrlWithMLModel(url);
+
+              if (!mounted || mlResult == null) return;
+
+              // ✅ Check prediction value
+              if (mlResult.toLowerCase().contains("benign")) {
+                showSafeDialog(url, "Machine Learning Model", fromML: true); // 👈 flag set
+              } else {
+                showDangerousDialog(url, "Machine Learning Model");
+              }
             },
-            child: const Text("Retry"),
+            child: const Text("Smart Verify"),
           ),
           TextButton(
             onPressed: () => Navigator.pop(context),
